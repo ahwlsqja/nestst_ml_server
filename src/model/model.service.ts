@@ -9,6 +9,8 @@ import { Cache } from 'cache-manager'
 import { ModelDetail } from './entities/model_detail.entity';
 import { MyModelDto } from './dto/my-model-find.dto';
 import { QueryRunner as QR } from 'typeorm';
+import { ModelPhone } from './entities/model_phone.entity';
+import { cache } from 'joi';
 
 @Injectable()
 export class ModelService{
@@ -45,11 +47,26 @@ export class ModelService{
 
     const modelId = model.identifiers[0].id
 
+    if(createModelDto.modelPhones && createModelDto.modelPhones.length > 0){
+      for(const phone of createModelDto.modelPhones){
+        await qr.manager.createQueryBuilder()
+          .insert()
+          .into(ModelPhone)
+          .values({
+            phone: phone,
+            modelDetail: {
+              id: modelDetailId,
+            }
+          })
+          .execute()
+      }
+    }
+
     return await qr.manager.findOne(Model, {
       where: {
         id: modelId,
       },
-      relations: ['detail']
+      relations: ['detail', 'detail.modelPhones']
     });
   }
 
@@ -73,16 +90,17 @@ export class ModelService{
   }
 
   async findOne(userId: number) {
-    const model = await this.modelrepository.createQueryBuilder('model')
+    const models = await this.modelrepository.createQueryBuilder('model')
     .leftJoinAndSelect('model.detail', 'detail')
+    .leftJoinAndSelect('detail.modelPhones', 'phone')
     .where('model.userId =: userId', {userId})
-    .getOne();
+    .getMany();
 
-    if(!model){
+    if(models.length === 0){
       throw new NotFoundException('존재하지 않는 ID의 모델입니다.');
     }
 
-    return model
+    return models
   }
 
   async findMyModelOne(id: number){
@@ -118,7 +136,7 @@ export class ModelService{
         where: {
           id: updateModelDto.id,
         },
-        relations: ['detail']
+        relations: ['detail', 'detail.modelPhones']
       });
 
       if(!cachemodel){
@@ -135,19 +153,40 @@ export class ModelService{
         detail: updateModelDto.detail,
       })
     }
+    const existingPhones = cachemodel.detail.modelPhones.map(phone => phone.phone);
+    const newPhones = updateModelDto.modelPhones;
+    
+    if(newPhones.length > 0){
+      if(existingPhones.length === 3) {
+        for(let i=0; i < newPhones.length; i++){
+          const phoneToReplace = existingPhones[i];
+          await qr.manager.update(ModelPhone, { phone: phoneToReplace }, { phone: newPhones[i]})
+          existingPhones[i] = newPhones[i]
+        }
+        
+      } else {
+        for (const newPhone of newPhones){
+          if(existingPhones.length < 3){
+            existingPhones.push(newPhone);
+          } else {
+            const phoneToReplace = existingPhones[0];
+            await qr.manager.update(ModelPhone, { phoneToReplace }, { phone: newPhone })
+            existingPhones[0] = newPhone
+          }
+        }
+      }
+    }
 
     updatedModel = await qr.manager.findOne(Model, {
       where: {
         id: updateModelDto.id,
       },
-      relations: ['detail'],
+      relations: ['detail', 'detail.modelPhones'],
     })
 
     await this.cacheManager.set(cacheKey, updatedModel, 60*60*24*30)
 
     return updatedModel
-
-
   }
 
   async remove(id: number) {
