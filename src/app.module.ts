@@ -12,6 +12,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { envVariableKeys } from './common/const/env.const';
 import { Model } from './model/entities/model.entity';
 import { ModelDetail } from './model/entities/model_detail.entity';
+import { ModelPhone } from './model/entities/model_phone.entity';
 
 
 @Module({
@@ -41,7 +42,8 @@ import { ModelDetail } from './model/entities/model_detail.entity';
         database: configService.get<string>(envVariableKeys.dbDatabase),
         entities: [
           Model,
-          ModelDetail
+          ModelDetail,
+          ModelPhone,
         ],
         synchronize: true,
       }),

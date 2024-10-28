@@ -1,5 +1,5 @@
 import { Controller, Inject, UseInterceptors } from '@nestjs/common';
-import { ClientProxy, MessagePattern, Payload } from '@nestjs/microservices';
+import { ClientProxy, EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import { ModelService } from './model.service';
 import { CreateModelDto } from './dto/create-model.dto';
 import { UpdateModelDto } from './dto/update-model.dto';
@@ -7,6 +7,7 @@ import { TransactionInterceptor } from 'src/common/interceptor/transaction.inter
 import { QueryRunner } from '../common/decorator/query-runner.decorator'
 import { QueryRunner as QR } from 'typeorm';
 import { MyModelDto } from './dto/my-model-find.dto';
+import { exist } from 'joi';
 
 @Controller()
 export class ModelController {
@@ -36,7 +37,7 @@ export class ModelController {
 
   }
 
-  @MessagePattern('recent_model')
+  @MessagePattern({ cmd: 'recent_model'})
   async findAll() {
     try{
       const result = await this.modelService.findModelRecent();
@@ -54,10 +55,10 @@ export class ModelController {
 
   }
 
-  @MessagePattern('get_my_model')
-  findOne(@Payload() userId: number) {
+  @MessagePattern({ cmd : 'get_my_model'})
+  async findOne(@Payload() payload : {userId: number}) {
     try{
-        const result = this.modelService.findOne(userId);
+        const result = this.modelService.findOne(payload.userId);
 
         this.client.emit('my_model_find', {result});
 
@@ -69,11 +70,14 @@ export class ModelController {
     }
   }
 
-  @MessagePattern('get_my_model_one')
-  findMyModelOne(@Payload() id: number){
-    try{
-      const result = this.modelService.findMyModelOne(id)
+  @MessagePattern({cmd: 'get_my_model_one'})
+  async findMyModelOne(@Payload() payload: {id: number}){
+    try{ 
+      console.log("hided")
 
+      console.log(payload.id)
+      const result = await this.modelService.findMyModelOne(payload.id)
+      console.log(123123)
       this.client.emit('model_one_get', {result});
 
       return result;
@@ -86,14 +90,19 @@ export class ModelController {
 
 
 
-  @MessagePattern('update_model')
+  @MessagePattern({cmd: 'update_model'})
   @UseInterceptors(TransactionInterceptor)
-  update(
-    @Payload() updateModelDto: UpdateModelDto,
+  async update(
+    @Payload() payload: { updateModelDto: UpdateModelDto },
     @QueryRunner() queryRunner: QR,
   ) {
     try{
-      const result = this.modelService.update(updateModelDto, queryRunner);
+      const updateModelDto = payload.updateModelDto;
+      console.log('업데이트 요청:', updateModelDto); // DTO 로그
+      console.log('업데이트 DTO ID:', updateModelDto.id); // ID 로그
+      console.log('업데이트 DTO ID:', updateModelDto.detail); // ID 로그
+
+      const result = await this.modelService.update(updateModelDto, queryRunner);
 
       this.client.emit('updated_model', {result});
 
@@ -105,19 +114,32 @@ export class ModelController {
     }
   }
 
-  @MessagePattern('delete_model')
-  remove(@Payload() id: number) {
+  @MessagePattern({cmd: 'delete_model'})
+  async remove(@Payload() payload: { id: number }) {
     try{
-      const result = this.modelService.remove(id);
+      console.log(payload.id)
+      const result = this.modelService.remove(payload.id);
 
-      this.client.emit('deleted_model', {result});
+      this.client.send('deleted_model', {result});
 
       return result;
     }catch(error){
-      this.client.emit('deleted_model_error', {error: error.message});
+      this.client.send('deleted_model_error', {error: error.message});
 
       throw error;
     }
-    
+  }
+
+  @MessagePattern({cmd: 'model_check'})
+  async handleModelCheck(@Payload() data:{modelId:number}):Promise<boolean>{
+    console.log(1)
+    const model = await this.modelService.findMyModelOne(data.modelId);
+    console.log(model)
+    if(model){
+      return true
+    }
+    else{
+      return false
+    }
   }
 }

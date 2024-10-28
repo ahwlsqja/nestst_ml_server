@@ -5,6 +5,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Model } from './entities/model.entity';
 import { ModelDetail } from './entities/model_detail.entity';
+import { ModelPhone } from './entities/model_phone.entity';
 
 @Module({
   imports: [
@@ -23,7 +24,8 @@ import { ModelDetail } from './entities/model_detail.entity';
     ]),
   TypeOrmModule.forFeature([
     Model,
-    ModelDetail
+    ModelDetail,
+    ModelPhone,
   ]),
 ],
   controllers: [ModelController],

@@ -93,7 +93,7 @@ export class ModelService{
     const models = await this.modelrepository.createQueryBuilder('model')
     .leftJoinAndSelect('model.detail', 'detail')
     .leftJoinAndSelect('detail.modelPhones', 'phone')
-    .where('model.userId =: userId', {userId})
+    .where('model.userId = :userId', {userId})
     .getMany();
 
     if(models.length === 0){
@@ -104,25 +104,31 @@ export class ModelService{
   }
 
   async findMyModelOne(id: number){
+    console.log(1232131)
     const cacheKey = `model_${id}`
     
     const cachedModel = await this.cacheManager.get<Model>(cacheKey);
+    console.log(cachedModel)
+    console.log(13213)
     if(cachedModel){
       return cachedModel;
     }
-
+    console.log(1)
     const model = await this.modelrepository.findOne({
       where: {
         id: id
-      }
+      },
+      relations: ['detail', 'detail.modelPhones']
     });
+    console.log(1)
 
     if(!model){
       throw new BadRequestException('존재하지 않는 모델입니다!');
     }
+    console.log(1)
 
     await this.cacheManager.set(cacheKey, model, 60*60*24*30)
-
+    console.log(model)
     return model;
   }
 
@@ -130,7 +136,8 @@ export class ModelService{
     let updatedModel;
     const cacheKey = `model_${updateModelDto.id}`
     
-    const cachemodel = await this.cacheManager.get<Model>(cacheKey);
+    let cachemodel = await this.cacheManager.get<Model>(cacheKey);
+    console.log(`${cachemodel}1`)
     if(!cachemodel){
       const cachemodel = await qr.manager.findOne(Model, {
         where: {
@@ -138,16 +145,21 @@ export class ModelService{
         },
         relations: ['detail', 'detail.modelPhones']
       });
+      console.log(`${cachemodel}2`)
 
       if(!cachemodel){
         throw new NotFoundException('존재하지 않는 모델입니다.')
       }
+
+      await this.cacheManager.set(cacheKey, cachemodel, 60*60*24*30)
     }
 
     await qr.manager.update(Model, updateModelDto.id, {
       userId: updateModelDto.userId,
     });
 
+    cachemodel = await this.cacheManager.get<Model>(cacheKey)
+    console.log(cachemodel)
     if(updateModelDto.detail){
       await qr.manager.update(ModelDetail, cachemodel.detail.id, {
         detail: updateModelDto.detail,
@@ -155,8 +167,9 @@ export class ModelService{
     }
     const existingPhones = cachemodel.detail.modelPhones.map(phone => phone.phone);
     const newPhones = updateModelDto.modelPhones;
+    console.log(newPhones)
     
-    if(newPhones.length > 0){
+    if(newPhones !== undefined){
       if(existingPhones.length === 3) {
         for(let i=0; i < newPhones.length; i++){
           const phoneToReplace = existingPhones[i];
@@ -168,6 +181,8 @@ export class ModelService{
         for (const newPhone of newPhones){
           if(existingPhones.length < 3){
             existingPhones.push(newPhone);
+            console.log(`${existingPhones} 잘들어갔나`)
+            await qr.manager.insert(ModelPhone, { phone: newPhone,modelDetail: cachemodel.detail})
           } else {
             const phoneToReplace = existingPhones[0];
             await qr.manager.update(ModelPhone, { phoneToReplace }, { phone: newPhone })
@@ -183,13 +198,14 @@ export class ModelService{
       },
       relations: ['detail', 'detail.modelPhones'],
     })
-
+    console.log(updatedModel)
     await this.cacheManager.set(cacheKey, updatedModel, 60*60*24*30)
 
     return updatedModel
   }
 
   async remove(id: number) {
+    console.log(id)
     const cacheKey = `model_${id}`
     
     const cachemodel = await this.cacheManager.get<Model>(cacheKey);
@@ -223,7 +239,6 @@ export class ModelService{
       .where('id = :id', {id})
       .execute();
 
-      await this.modelDetailRepository.delete(cachemodel.id);
 
       return id;
     }
